@@ -152,7 +152,7 @@ textarea {
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
 }
 
@@ -304,6 +304,10 @@ textarea:focus {
 .badge.skipped {
   background: #edd9d4;
   color: var(--danger);
+}
+.badge.transplant {
+  background: #f6e3c8;
+  color: var(--earth-deep);
 }
 
 .error {

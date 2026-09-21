@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import api from '../api'
 
 const list = ref([])
@@ -27,6 +27,19 @@ const statusLabel = {
   done: '已完成',
   skipped: '已跳过',
 }
+
+const selectedZone = computed(
+  () => zones.value.find((z) => z.id === Number(form.zoneId)) || null
+)
+// 与服务端共用同一规则：起灌时刻落在某分区最近移栽 ±60 分钟内即被拦截
+const windowConflict = computed(() => {
+  if (editingId.value || !selectedZone.value?.lastTransplantAt || !form.startAt) {
+    return false
+  }
+  const t1 = new Date(selectedZone.value.lastTransplantAt).getTime()
+  const t2 = new Date(form.startAt).getTime()
+  return Math.abs(t1 - t2) <= 60 * 60 * 1000
+})
 
 function resetForm() {
   editingId.value = null
@@ -82,7 +95,14 @@ async function save() {
     resetForm()
     await load()
   } catch (e) {
-    error.value = JSON.stringify(e.response?.data || '保存失败')
+    if (e.response?.status === 409) {
+      error.value =
+        typeof e.response.data?.detail === 'string'
+          ? e.response.data.detail
+          : '冲突：该分区在起灌时刻前后 60 分钟内处于移栽窗口，禁止新建轮灌'
+    } else {
+      error.value = JSON.stringify(e.response?.data || '保存失败')
+    }
   }
 }
 
@@ -123,7 +143,7 @@ onMounted(async () => {
           分区
           <select v-model="form.zoneId">
             <option v-for="z in zones" :key="z.id" :value="z.id">
-              {{ z.greenhouseName }} / {{ z.zoneCode }}
+              {{ z.greenhouseName }} / {{ z.zoneCode }}{{ z.inTransplantWindow ? '（移栽窗口内）' : '' }}
             </option>
           </select>
         </label>
@@ -140,9 +160,12 @@ onMounted(async () => {
           </select>
         </label>
       </div>
+      <p v-if="windowConflict" class="error">
+        起灌时刻落在该分区最近移栽的前后 60 分钟窗口内，新建轮灌会被服务端拒绝（409）。
+      </p>
       <p v-if="error" class="error">{{ error }}</p>
       <div class="actions" style="margin-top:12px">
-        <button class="btn" @click="save">保存</button>
+        <button class="btn" :disabled="windowConflict" @click="save">保存</button>
         <button v-if="editingId" class="btn ghost" @click="resetForm">取消编辑</button>
       </div>
     </div>

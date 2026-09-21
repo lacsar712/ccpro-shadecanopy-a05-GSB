@@ -6,6 +6,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from core.models import ClimateLog, Greenhouse, IrrigationCycle, Zone
+from core.services import create_transplant_event
 
 User = get_user_model()
 
@@ -60,22 +61,47 @@ class Command(BaseCommand):
         )
 
         z1 = Zone.objects.create(
-            greenhouse=g1, zone_code="A-01", crop_name="樱桃番茄", status=Zone.STATUS_GROWING
+            greenhouse=g1, zone_code="A-01", crop_name="黄瓜", status=Zone.STATUS_GROWING
         )
         z2 = Zone.objects.create(
-            greenhouse=g1, zone_code="A-02", crop_name="油麦菜", status=Zone.STATUS_GROWING
+            greenhouse=g1, zone_code="A-02", crop_name="散叶生菜", status=Zone.STATUS_GROWING
         )
         z3 = Zone.objects.create(
             greenhouse=g1, zone_code="A-03", crop_name="", status=Zone.STATUS_IDLE
         )
         z4 = Zone.objects.create(
-            greenhouse=g2, zone_code="B-01", crop_name="红颜草莓", status=Zone.STATUS_GROWING
+            greenhouse=g2, zone_code="B-01", crop_name="甜查理草莓", status=Zone.STATUS_GROWING
         )
         z5 = Zone.objects.create(
             greenhouse=g2, zone_code="B-02", crop_name="章姬草莓", status=Zone.STATUS_FALLOW
         )
 
         now = timezone.now()
+
+        # 移栽换茬种子（走统一服务：同事务回写作物名 + 写气候记录）
+        # A-01 的移栽在 30 分钟前，仍处于 ±60 分钟移栽窗口内；
+        # A-02 / B-01 的移栽已超出窗口。
+        create_transplant_event(
+            zone=z1,
+            to_crop="樱桃番茄",
+            transplanted_at=now - timedelta(minutes=30),
+            operator="老周",
+            notes="拔园换茬，土壤消毒后定植樱桃番茄",
+        )
+        create_transplant_event(
+            zone=z2,
+            to_crop="油麦菜",
+            transplanted_at=now - timedelta(days=3),
+            operator="李姐",
+            notes="生菜清茬后直播油麦菜",
+        )
+        create_transplant_event(
+            zone=z4,
+            to_crop="红颜草莓",
+            transplanted_at=now - timedelta(hours=26),
+            operator="老周",
+            notes="高架基质更换品种为红颜",
+        )
         ClimateLog.objects.bulk_create(
             [
                 ClimateLog(
@@ -162,9 +188,12 @@ class Command(BaseCommand):
             ]
         )
 
+        from core.models import TransplantEvent
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"种子完成：温室 {Greenhouse.objects.count()}，分区 {Zone.objects.count()}，"
-                f"气候 {ClimateLog.objects.count()}，轮灌 {IrrigationCycle.objects.count()}"
+                f"气候 {ClimateLog.objects.count()}，轮灌 {IrrigationCycle.objects.count()}，"
+                f"移栽 {TransplantEvent.objects.count()}"
             )
         )

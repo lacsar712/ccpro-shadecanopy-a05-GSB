@@ -23,7 +23,7 @@ onMounted(async () => {
     <div class="page-head">
       <div>
         <h1>总览看板</h1>
-        <p>温室规模、在种分区与近时气候 / 今日轮灌</p>
+        <p>温室规模、在种分区、近时气候 / 今日轮灌与移栽窗口</p>
       </div>
     </div>
 
@@ -45,6 +45,10 @@ onMounted(async () => {
       <div class="stat">
         <div class="label">今日排程轮灌</div>
         <div class="value">{{ stats.irrigationScheduledToday }}</div>
+      </div>
+      <div class="stat">
+        <div class="label">处于移栽窗口分区</div>
+        <div class="value">{{ stats.transplantWindowZoneCount }}</div>
       </div>
     </div>
 

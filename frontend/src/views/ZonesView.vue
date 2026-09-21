@@ -10,7 +10,6 @@ const filterGreenhouseId = ref('')
 const form = reactive({
   greenhouseId: '',
   zoneCode: '',
-  cropName: '',
   status: 'idle',
 })
 
@@ -20,7 +19,6 @@ function resetForm() {
   editingId.value = null
   form.greenhouseId = greenhouses.value[0]?.id || ''
   form.zoneCode = ''
-  form.cropName = ''
   form.status = 'idle'
 }
 
@@ -48,16 +46,16 @@ function edit(row) {
   editingId.value = row.id
   form.greenhouseId = row.greenhouseId
   form.zoneCode = row.zoneCode
-  form.cropName = row.cropName
   form.status = row.status
 }
 
 async function save() {
   error.value = ''
+  // 注意：payload 不含 cropName —— 作物名只能通过「移栽事件」修改，
+  // 浏览器端直接改作物名不会被服务端接受（cropName 为只读字段）。
   const payload = {
     greenhouseId: Number(form.greenhouseId),
     zoneCode: form.zoneCode,
-    cropName: form.cropName,
     status: form.status,
   }
   try {
@@ -79,6 +77,10 @@ async function remove(id) {
   await load()
 }
 
+function fmtTime(v) {
+  return v ? new Date(v).toLocaleString() : '—'
+}
+
 onMounted(async () => {
   await loadGreenhouses()
   await load()
@@ -90,7 +92,10 @@ onMounted(async () => {
     <div class="page-head">
       <div>
         <h1>分区管理</h1>
-        <p>同温室 zoneCode 唯一；状态 idle / growing / fallow</p>
+        <p>
+          同温室 zoneCode 唯一；状态 idle / growing / fallow。
+          作物名不可直接修改，请到「移栽事件」登记换茬。
+        </p>
       </div>
       <div class="actions">
         <select v-model="filterGreenhouseId" @change="load">
@@ -110,7 +115,6 @@ onMounted(async () => {
           </select>
         </label>
         <label>分区编码<input v-model="form.zoneCode" required /></label>
-        <label>作物<input v-model="form.cropName" /></label>
         <label>
           状态
           <select v-model="form.status">
@@ -136,6 +140,8 @@ onMounted(async () => {
             <th>编码</th>
             <th>作物</th>
             <th>状态</th>
+            <th>最近移栽时刻</th>
+            <th>移栽窗口</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -146,6 +152,11 @@ onMounted(async () => {
             <td>{{ row.zoneCode }}</td>
             <td>{{ row.cropName || '—' }}</td>
             <td><span class="badge" :class="row.status">{{ statusLabel[row.status] || row.status }}</span></td>
+            <td>{{ fmtTime(row.lastTransplantAt) }}</td>
+            <td>
+              <span v-if="row.inTransplantWindow" class="badge transplant">窗口内</span>
+              <span v-else style="color:var(--muted)">否</span>
+            </td>
             <td class="actions">
               <button class="btn ghost" @click="edit(row)">编辑</button>
               <button class="btn danger" @click="remove(row.id)">删除</button>

@@ -100,3 +100,30 @@ class IrrigationCycle(models.Model):
 
     def __str__(self):
         return f"Irrig@{self.zone_id} {self.start_at} ({self.status})"
+
+
+class TransplantEvent(models.Model):
+    """分区移栽换茬事件。
+
+    事件是变更分区作物名的唯一入口：创建事件后由服务端在同一事务内
+    回写 zone.crop_name，并写一条采样时刻等于移栽时刻的气候记录。
+    """
+
+    zone = models.ForeignKey(
+        Zone, on_delete=models.CASCADE, related_name="transplant_events"
+    )
+    from_crop = models.CharField(max_length=120, blank=True, default="")
+    to_crop = models.CharField(max_length=120)
+    transplanted_at = models.DateTimeField()
+    operator = models.CharField(max_length=120)
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-transplanted_at", "-id"]
+        indexes = [
+            models.Index(fields=["zone", "transplanted_at"]),
+        ]
+
+    def __str__(self):
+        return f"Transplant@{self.zone_id} {self.from_crop}->{self.to_crop} {self.transplanted_at}"

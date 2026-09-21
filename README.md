@@ -46,10 +46,19 @@ docker compose down
 
 1. **Auth**：JWT `POST /api/auth/token/`，当前用户 `GET /api/auth/me/`
 2. **Greenhouse**：name / location / areaM2 / notes
-3. **Zone**：greenhouseId / zoneCode / cropName / status(`idle|growing|fallow`)；同温室 zoneCode 唯一
+3. **Zone**：greenhouseId / zoneCode / ~~cropName（只读）~~ / status(`idle|growing|fallow`)；同温室 zoneCode 唯一。**作物名不能在分区接口里直接修改，只能通过移栽换茬事件由服务端回写**
 4. **ClimateLog**：zoneId / recordedAt / tempC / humidityPct / parUmol / co2Ppm；**humidityPct ∈ [20, 100]**
-5. **IrrigationCycle**：zoneId / startAt / durationMin / waterLiters / status(`scheduled|running|done|skipped`)
-6. **Dashboard**：温室数、growing 分区数、近 24h 气候日志数、今日 scheduled 轮灌数 → `GET /api/dashboard/`
+5. **IrrigationCycle**：zoneId / startAt / durationMin / waterLiters / status(`scheduled|running|done|skipped`)；**起灌时刻落入该区任一移栽事件前后 60 分钟窗口时禁止新建（409）**
+6. **TransplantEvent（移栽换茬）**：zoneId / fromCrop（服务端取分区当前作物名）/ toCrop（非空）/ transplantedAt / operator / notes（可空）；创建后在**同一数据库事务**内完成：
+   - 写移栽事件；
+   - 把分区 `cropName` 改成新作物；
+   - 写一条气候记录：`recordedAt = transplantedAt`，**湿度取默认值 70%（默认值约定在 60～80 之间，见 `core/services.py` 的 `TRANSPLANT_DEFAULT_HUMIDITY`）**，温度默认 24℃。
+   只写事件、只改作物名或只写气候记录都不会发生（事务整体回滚）。
+   - **冲突规则**：同一分区在移栽时刻前后 **60 分钟**内不得有第二条移栽，冲突返回 **409**；
+   - 该 60 分钟窗口与轮灌拦截**共用同一时间窗函数** `core.services.window_events_qs`；
+   - **休耕（fallow）分区禁止移栽**；**空闲（idle）分区允许移栽但备注必填**；空闲分区移栽后自动转为在种，**在种分区移栽后仍保持在种**。
+   - 分区列表每行同源返回 `lastTransplantAt` 与 `inTransplantWindow`（与看板计数共用 `annotate_zone_window`，看板「处于移栽窗口分区」数 = 列表 `inTransplantWindow=true` 行数）。
+7. **Dashboard**：温室数、growing 分区数、近 24h 气候日志数、今日 scheduled 轮灌数、处于移栽窗口分区数 → `GET /api/dashboard/`
 
 ## API 一览
 
@@ -62,6 +71,7 @@ docker compose down
 | CRUD | `/api/zones/?greenhouseId=&status=` |
 | CRUD | `/api/climate-logs/?zoneId=` |
 | CRUD | `/api/irrigation-cycles/?zoneId=&status=` |
+| CRUD | `/api/transplant-events/?zoneId=`（移栽换茬，仅创建有事务副作用） |
 | GET | `/api/dashboard/` |
 
 字段对外使用 camelCase（如 `areaM2`、`zoneCode`、`humidityPct`）。
@@ -104,7 +114,7 @@ ShadeCanopy-01/
 │   ├── manage.py
 │   ├── config/            # settings / urls
 │   ├── accounts/          # 自定义 User + role
-│   └── core/              # 温室/分区/气候/轮灌 + seed_data
+│   └── core/              # 温室/分区/气候/轮灌/移栽事件 + services 时间窗 + seed_data
 └── frontend/
     ├── Dockerfile
     ├── nginx.conf         # 静态资源 + /api 反代
