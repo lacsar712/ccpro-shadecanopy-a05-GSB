@@ -82,7 +82,11 @@ async function save() {
     resetForm()
     await load()
   } catch (e) {
-    error.value = JSON.stringify(e.response?.data || '保存失败')
+    if (!editingId.value && e.response?.status === 409) {
+      error.value = e.response?.data?.detail || '该分区处于移栽窗口（前后 60 分钟），禁止新建轮灌（409）'
+    } else {
+      error.value = JSON.stringify(e.response?.data || '保存失败')
+    }
   }
 }
 

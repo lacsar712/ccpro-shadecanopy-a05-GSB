@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ClimateLog, Greenhouse, IrrigationCycle, Zone
+from .models import ClimateLog, Greenhouse, IrrigationCycle, TransplantEvent, Zone
 
 
 @admin.register(Greenhouse)
@@ -26,3 +26,17 @@ class ClimateLogAdmin(admin.ModelAdmin):
 class IrrigationCycleAdmin(admin.ModelAdmin):
     list_display = ("id", "zone", "start_at", "duration_min", "water_liters", "status")
     list_filter = ("status", "zone")
+
+
+@admin.register(TransplantEvent)
+class TransplantEventAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "zone",
+        "previous_crop",
+        "new_crop",
+        "transplanted_at",
+        "operator",
+    )
+    list_filter = ("zone",)
+    search_fields = ("previous_crop", "new_crop", "operator")

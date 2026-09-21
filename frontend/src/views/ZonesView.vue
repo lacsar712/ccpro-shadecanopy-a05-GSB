@@ -10,7 +10,6 @@ const filterGreenhouseId = ref('')
 const form = reactive({
   greenhouseId: '',
   zoneCode: '',
-  cropName: '',
   status: 'idle',
 })
 
@@ -20,7 +19,6 @@ function resetForm() {
   editingId.value = null
   form.greenhouseId = greenhouses.value[0]?.id || ''
   form.zoneCode = ''
-  form.cropName = ''
   form.status = 'idle'
 }
 
@@ -48,7 +46,6 @@ function edit(row) {
   editingId.value = row.id
   form.greenhouseId = row.greenhouseId
   form.zoneCode = row.zoneCode
-  form.cropName = row.cropName
   form.status = row.status
 }
 
@@ -57,7 +54,6 @@ async function save() {
   const payload = {
     greenhouseId: Number(form.greenhouseId),
     zoneCode: form.zoneCode,
-    cropName: form.cropName,
     status: form.status,
   }
   try {
@@ -110,7 +106,6 @@ onMounted(async () => {
           </select>
         </label>
         <label>分区编码<input v-model="form.zoneCode" required /></label>
-        <label>作物<input v-model="form.cropName" /></label>
         <label>
           状态
           <select v-model="form.status">
@@ -120,6 +115,9 @@ onMounted(async () => {
           </select>
         </label>
       </div>
+      <p class="hint" style="margin:10px 0 0">
+        作物名不可直接编辑，请到「移栽事件」登记换茬，由服务端同步修改并补写气候记录。
+      </p>
       <p v-if="error" class="error">{{ error }}</p>
       <div class="actions" style="margin-top:12px">
         <button class="btn" @click="save">保存</button>
@@ -136,6 +134,8 @@ onMounted(async () => {
             <th>编码</th>
             <th>作物</th>
             <th>状态</th>
+            <th>最近移栽时刻</th>
+            <th>移栽窗口</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -146,6 +146,11 @@ onMounted(async () => {
             <td>{{ row.zoneCode }}</td>
             <td>{{ row.cropName || '—' }}</td>
             <td><span class="badge" :class="row.status">{{ statusLabel[row.status] || row.status }}</span></td>
+            <td>{{ row.lastTransplantAt ? new Date(row.lastTransplantAt).toLocaleString() : '—' }}</td>
+            <td>
+              <span v-if="row.inTransplantWindow" class="badge window">窗口内</span>
+              <span v-else>—</span>
+            </td>
             <td class="actions">
               <button class="btn ghost" @click="edit(row)">编辑</button>
               <button class="btn danger" @click="remove(row.id)">删除</button>

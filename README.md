@@ -47,9 +47,21 @@ docker compose down
 1. **Auth**：JWT `POST /api/auth/token/`，当前用户 `GET /api/auth/me/`
 2. **Greenhouse**：name / location / areaM2 / notes
 3. **Zone**：greenhouseId / zoneCode / cropName / status(`idle|growing|fallow`)；同温室 zoneCode 唯一
+   - **cropName 只读**：作物名只能通过「移栽事件」由服务端修改，浏览器端不可直接改。
+   - 列表额外返回 `lastTransplantAt`（最近移栽时刻）与 `inTransplantWindow`（是否处于移栽窗口）。
 4. **ClimateLog**：zoneId / recordedAt / tempC / humidityPct / parUmol / co2Ppm；**humidityPct ∈ [20, 100]**
 5. **IrrigationCycle**：zoneId / startAt / durationMin / waterLiters / status(`scheduled|running|done|skipped`)
-6. **Dashboard**：温室数、growing 分区数、近 24h 气候日志数、今日 scheduled 轮灌数 → `GET /api/dashboard/`
+6. **TransplantEvent（移栽 / 换茬事件）**：挂在分区上
+   - 字段：`zoneId`（所属分区）、`previousCrop`（原作物，服务端取分区当前作物名，只读）、`newCrop`（新作物，非空）、`transplantedAt`（移栽时刻）、`operator`（操作人）、`notes`（备注，可空）。
+   - **创建成功后服务端在同一数据库事务内完成三件事，缺一不可**：
+     1. 写入移栽事件；
+     2. 把分区 `cropName` 改为 `newCrop`（在种分区仍保持 `growing`；空闲分区移栽后进入 `growing`）；
+     3. 写一条 ClimateLog，其 `recordedAt = transplantedAt`，**湿度 humidityPct 取默认值 70（默认值取自 60～80 的区间）**，温度默认 25℃，PAR/CO₂ 默认 0。
+   - **休耕（fallow）分区禁止移栽**；**空闲（idle）分区允许移栽但 `notes` 必填**。
+   - **60 分钟窗口**：同一分区在移栽时刻前后各 60 分钟内不得再有第二条移栽，冲突返回 **409**。
+   - 该 60 分钟窗口内**禁止该分区新建轮灌**（轮灌 startAt 落入某条移栽事件前后 60 分钟即拦截，返回 **409**）。移栽冲突判定与轮灌拦截共用同一时间窗函数 `core/timewindow.py::transplant_events_in_window`。
+7. **Dashboard**：温室数、growing 分区数、近 24h 气候日志数、今日 scheduled 轮灌数、**处于移栽窗口的分区数** → `GET /api/dashboard/`
+   - `zonesInTransplantWindow` 与分区列表中 `inTransplantWindow === true` 的行数严格一致（后端共用同一注解查询集）。
 
 ## API 一览
 
@@ -61,6 +73,7 @@ docker compose down
 | CRUD | `/api/greenhouses/` |
 | CRUD | `/api/zones/?greenhouseId=&status=` |
 | CRUD | `/api/climate-logs/?zoneId=` |
+| 列表/新增 | `/api/transplant-events/?zoneId=` |
 | CRUD | `/api/irrigation-cycles/?zoneId=&status=` |
 | GET | `/api/dashboard/` |
 

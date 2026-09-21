@@ -29,6 +29,7 @@ function logout() {
         <router-link to="/greenhouses">温室管理</router-link>
         <router-link to="/zones">分区管理</router-link>
         <router-link to="/climate-logs">气候日志</router-link>
+        <router-link to="/transplant-events">移栽事件</router-link>
         <router-link to="/irrigation">轮灌计划</router-link>
       </nav>
       <div class="sidebar-foot">

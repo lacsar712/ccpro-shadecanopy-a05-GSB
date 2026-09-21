@@ -71,6 +71,39 @@ class ClimateLog(models.Model):
         return f"Climate@{self.zone_id} {self.recorded_at}"
 
 
+class TransplantEvent(models.Model):
+    """移栽（换茬）事件，挂在分区上。
+
+    事件创建成功后由服务端在同一事务内：
+      1. 把分区 crop_name 改为 new_crop_name；
+      2. 写一条 ClimateLog（recorded_at = transplanted_at，
+         湿度取默认值，见 core.timewindow）。
+    三者缺一不可，作物名不允许在浏览器端直接改。
+    """
+
+    zone = models.ForeignKey(
+        Zone, on_delete=models.CASCADE, related_name="transplant_events"
+    )
+    previous_crop = models.CharField(max_length=120, blank=True, default="")
+    new_crop = models.CharField(max_length=120)
+    transplanted_at = models.DateTimeField()
+    operator = models.CharField(max_length=120)
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-transplanted_at"]
+        indexes = [
+            models.Index(
+                fields=["zone", "transplanted_at"],
+                name="tx_zone_time_idx",
+            )
+        ]
+
+    def __str__(self):
+        return f"Transplant@{self.zone_id} {self.transplanted_at}: {self.new_crop}"
+
+
 class IrrigationCycle(models.Model):
     STATUS_SCHEDULED = "scheduled"
     STATUS_RUNNING = "running"

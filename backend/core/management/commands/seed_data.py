@@ -5,7 +5,14 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from core.models import ClimateLog, Greenhouse, IrrigationCycle, Zone
+from core.models import (
+    ClimateLog,
+    Greenhouse,
+    IrrigationCycle,
+    TransplantEvent,
+    Zone,
+)
+from core.timewindow import TRANSPLANT_DEFAULT_HUMIDITY, TRANSPLANT_DEFAULT_TEMP_C
 
 User = get_user_model()
 
@@ -122,11 +129,59 @@ class Command(BaseCommand):
         )
 
         today = now.replace(hour=9, minute=0, second=0, microsecond=0)
+
+        # 移栽（换茬）事件：至少两区，其中 z1 的一条仍处于前后 60 分钟窗口内。
+        # 种子绕过 API，但仍按服务端规则：事件 + 改作物名 + 同点气候记录三者齐全。
+        tx1_at = now - timedelta(minutes=30)   # z1：仍在窗口内
+        tx2_at = now - timedelta(hours=3)      # z4：已移出窗口
+        TransplantEvent.objects.bulk_create(
+            [
+                TransplantEvent(
+                    zone=z1,
+                    previous_crop="樱桃番茄",
+                    new_crop="圣女果",
+                    transplanted_at=tx1_at,
+                    operator="grower",
+                    notes="换茬移栽高架新品系",
+                ),
+                TransplantEvent(
+                    zone=z4,
+                    previous_crop="红颜草莓",
+                    new_crop="隋珠草莓",
+                    transplanted_at=tx2_at,
+                    operator="grower",
+                    notes="季末换茬",
+                ),
+            ]
+        )
+        # 事件落地后分区作物名同步为新作物（在种分区仍保持在种）。
+        z1.crop_name = "圣女果"
+        z1.save(update_fields=["crop_name", "updated_at"])
+        z4.crop_name = "隋珠草莓"
+        z4.save(update_fields=["crop_name", "updated_at"])
+        # 同事务应补写的气候记录：采样时刻=移栽时刻，湿度默认 70（区间 60～80）。
+        ClimateLog.objects.bulk_create(
+            [
+                ClimateLog(
+                    zone=z1,
+                    recorded_at=tx1_at,
+                    temp_c=TRANSPLANT_DEFAULT_TEMP_C,
+                    humidity_pct=TRANSPLANT_DEFAULT_HUMIDITY,
+                ),
+                ClimateLog(
+                    zone=z4,
+                    recorded_at=tx2_at,
+                    temp_c=TRANSPLANT_DEFAULT_TEMP_C,
+                    humidity_pct=TRANSPLANT_DEFAULT_HUMIDITY,
+                ),
+            ]
+        )
+
         IrrigationCycle.objects.bulk_create(
             [
                 IrrigationCycle(
                     zone=z1,
-                    start_at=today + timedelta(hours=1),
+                    start_at=now + timedelta(hours=2),
                     duration_min=25,
                     water_liters=Decimal("180.00"),
                     status=IrrigationCycle.STATUS_SCHEDULED,
@@ -165,6 +220,7 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 f"种子完成：温室 {Greenhouse.objects.count()}，分区 {Zone.objects.count()}，"
-                f"气候 {ClimateLog.objects.count()}，轮灌 {IrrigationCycle.objects.count()}"
+                f"气候 {ClimateLog.objects.count()}，轮灌 {IrrigationCycle.objects.count()}，"
+                f"移栽 {TransplantEvent.objects.count()}"
             )
         )
